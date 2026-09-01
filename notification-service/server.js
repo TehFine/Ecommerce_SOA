@@ -4,7 +4,15 @@ const app=express(); app.use(cors()); app.use(express.json());
 const PORT=process.env.PORT||3006;
 const RABBITMQ_URL=process.env.RABBITMQ_URL||'amqp://localhost:5672';
 
-let logs=[];
+let logs=[]; // fallback memory
+let useSupabase2=false; let supabase2=null;
+if(process.env.SUPABASE_URL && (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_KEY)){
+  try{ const {createClient}=require('@supabase/supabase-js'); supabase2=createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_KEY); useSupabase2=true; console.log('[notification-service] Supabase ON'); }catch(e){ console.log('[notification-service] Supabase fail',e.message); }
+} else console.log('[notification-service] Memory mode');
+
+async function dbAddLog(entry){ if(!useSupabase2){ logs.push(entry); return; } try{ await supabase2.from('notifications').insert({event:entry.event, data:entry.data, channel:entry.channel}); }catch(e){ console.log('dbAddLog fail',e.message); logs.push(entry); } }
+async function dbListLogs(){ if(!useSupabase2) return logs; try{ const {data}=await supabase2.from('notifications').select('*').order('created_at',{ascending:false}).limit(50); return data||[]; }catch(e){ return logs; } }
+
 async function send(channel, event, data){
   const msg=`[${new Date().toISOString()}] ${event} -> ${data.id||data.orderId||JSON.stringify(data).slice(0,80)}`;
   const entry={event,data,at:new Date().toISOString(),channel};
@@ -55,4 +63,4 @@ async function initRabbit(){
   }catch(e){ console.log('[notification] RabbitMQ unavailable, using HTTP fallback',e.message);}
 }
 
-initRabbit().then(()=> app.listen(PORT,()=>console.log(`[notification-service] http://localhost:${PORT} event-driven - Swagger http://localhost:${PORT}/api-docs`)));
+initRabbit().then(()=> app.listen(PORT,()=>console.log(`[notification-service] http://localhost:${PORT} event-driven - ${useSupabase2?'Supabase':'memory'} - Swagger http://localhost:${PORT}/api-docs`)));
