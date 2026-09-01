@@ -1,0 +1,91 @@
+services:
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+    command: redis-server --appendonly yes
+    volumes: [redis-data:/data]
+    networks: [soa-net]
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    networks: [soa-net]
+
+  user-service:
+    build: ./user-service
+    ports: ["3001:3001"]
+    environment:
+      - PORT=3001
+      - JWT_SECRET=soa_jwt_secret_2026
+      - JWT_EXPIRES=1h
+      - REFRESH_EXPIRES=7d
+    networks: [soa-net]
+
+  product-service:
+    build: ./product-service
+    ports: ["3002:3002"]
+    environment: [PORT=3002]
+    networks: [soa-net]
+
+  payment-soap-gateway:
+    build: ./payment-soap-gateway
+    ports: ["3004:3004"]
+    environment: [PORT=3004]
+    networks: [soa-net]
+
+  payment-service:
+    build: ./payment-service
+    ports: ["3005:3005"]
+    environment:
+      - PORT=3005
+      - SOAP_WSDL_URL=http://payment-soap-gateway:3004/wsdl?wsdl
+    depends_on: [payment-soap-gateway]
+    networks: [soa-net]
+
+  order-service:
+    build: ./order-service
+    ports: ["3003:3003"]
+    environment:
+      - PORT=3003
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672
+      - USER_SERVICE_URL=http://user-service:3001
+      - PRODUCT_SERVICE_URL=http://product-service:3002
+    depends_on: [rabbitmq, user-service, product-service]
+    networks: [soa-net]
+
+  notification-service:
+    build: ./notification-service
+    ports: ["3006:3006"]
+    environment:
+      - PORT=3006
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672
+    depends_on: [rabbitmq]
+    networks: [soa-net]
+
+  api-gateway:
+    build: ./api-gateway
+    ports: ["3000:3000"]
+    environment:
+      - PORT=3000
+      - USER_SERVICE_URL=http://user-service:3001
+      - PRODUCT_SERVICE_URL=http://product-service:3002
+      - ORDER_SERVICE_URL=http://order-service:3003
+      - PAYMENT_SERVICE_URL=http://payment-service:3005
+      - NOTIF_SERVICE_URL=http://notification-service:3006
+      - SOAP_GATEWAY_URL=http://payment-soap-gateway:3004
+      - JWT_SECRET=soa_jwt_secret_2026
+      - REDIS_URL=redis://redis:6379
+    depends_on: [user-service, product-service, order-service, payment-service, notification-service, redis]
+    networks: [soa-net]
+
+volumes:
+  redis-data:
+
+networks:
+  soa-net:
+    driver: bridge
