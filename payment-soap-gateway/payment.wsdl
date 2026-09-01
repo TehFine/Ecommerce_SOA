@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions name="PaymentGatewayService"
+  targetNamespace="http://vnpay.vn/payment/wsdl"
+  xmlns="http://schemas.xmlsoap.org/wsdl/"
+  xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/"
+  xmlns:tns="http://vnpay.vn/payment/wsdl"
+  xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <types>
+    <xsd:schema targetNamespace="http://vnpay.vn/payment/wsdl">
+      <xsd:element name="processPaymentRequest">
+        <xsd:complexType><xsd:sequence>
+          <xsd:element name="orderId" type="xsd:string"/>
+          <xsd:element name="amount" type="xsd:long"/>
+          <xsd:element name="currency" type="xsd:string"/>
+          <xsd:element name="cardNumber" type="xsd:string"/>
+          <xsd:element name="expiryDate" type="xsd:string"/>
+          <xsd:element name="cvv" type="xsd:string"/>
+          <xsd:element name="callbackUrl" type="xsd:string" minOccurs="0"/>
+        </xsd:sequence></xsd:complexType>
+      </xsd:element>
+      <xsd:element name="processPaymentResponse">
+        <xsd:complexType><xsd:sequence>
+          <xsd:element name="transactionId" type="xsd:string"/>
+          <xsd:element name="status" type="xsd:string"/>
+          <xsd:element name="message" type="xsd:string"/>
+          <xsd:element name="timestamp" type="xsd:string"/>
+        </xsd:sequence></xsd:complexType>
+      </xsd:element>
+      <xsd:element name="checkPaymentStatusRequest">
+        <xsd:complexType><xsd:sequence><xsd:element name="transactionId" type="xsd:string"/></xsd:sequence></xsd:complexType>
+      </xsd:element>
+      <xsd:element name="checkPaymentStatusResponse">
+        <xsd:complexType><xsd:sequence>
+          <xsd:element name="transactionId" type="xsd:string"/>
+          <xsd:element name="status" type="xsd:string"/>
+          <xsd:element name="amount" type="xsd:long"/>
+        </xsd:sequence></xsd:complexType>
+      </xsd:element>
+      <xsd:element name="refundPaymentRequest">
+        <xsd:complexType><xsd:sequence><xsd:element name="transactionId" type="xsd:string"/><xsd:element name="amount" type="xsd:long" minOccurs="0"/></xsd:sequence></xsd:complexType>
+      </xsd:element>
+      <xsd:element name="refundPaymentResponse">
+        <xsd:complexType><xsd:sequence>
+          <xsd:element name="transactionId" type="xsd:string"/>
+          <xsd:element name="status" type="xsd:string"/>
+          <xsd:element name="refundId" type="xsd:string"/>
+        </xsd:sequence></xsd:complexType>
+      </xsd:element>
+    </xsd:schema>
+  </types>
+  <message name="processPaymentInput"><part name="parameters" element="tns:processPaymentRequest"/></message>
+  <message name="processPaymentOutput"><part name="parameters" element="tns:processPaymentResponse"/></message>
+  <message name="checkStatusInput"><part name="parameters" element="tns:checkPaymentStatusRequest"/></message>
+  <message name="checkStatusOutput"><part name="parameters" element="tns:checkPaymentStatusResponse"/></message>
+  <message name="refundInput"><part name="parameters" element="tns:refundPaymentRequest"/></message>
+  <message name="refundOutput"><part name="parameters" element="tns:refundPaymentResponse"/></message>
+  <portType name="PaymentGatewayPortType">
+    <operation name="processPayment"><input message="tns:processPaymentInput"/><output message="tns:processPaymentOutput"/></operation>
+    <operation name="checkPaymentStatus"><input message="tns:checkStatusInput"/><output message="tns:checkStatusOutput"/></operation>
+    <operation name="refundPayment"><input message="tns:refundInput"/><output message="tns:refundOutput"/></operation>
+  </portType>
+  <binding name="PaymentGatewayBinding" type="tns:PaymentGatewayPortType">
+    <soap:binding style="document" transport="http://schemas.xmlsoap.org/soap/http"/>
+    <operation name="processPayment"><soap:operation soapAction="http://vnpay.vn/payment/processPayment"/><input><soap:body use="literal"/></input><output><soap:body use="literal"/></output></operation>
+    <operation name="checkPaymentStatus"><soap:operation soapAction="http://vnpay.vn/payment/checkPaymentStatus"/><input><soap:body use="literal"/></input><output><soap:body use="literal"/></output></operation>
+    <operation name="refundPayment"><soap:operation soapAction="http://vnpay.vn/payment/refundPayment"/><input><soap:body use="literal"/></input><output><soap:body use="literal"/></output></operation>
+  </binding>
+  <service name="PaymentGatewayService">
+    <port name="PaymentGatewayPort" binding="tns:PaymentGatewayBinding">
+      <soap:address location="http://localhost:3004/wsdl"/>
+    </port>
+  </service>
+</definitions>
