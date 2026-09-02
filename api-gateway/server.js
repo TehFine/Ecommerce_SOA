@@ -39,12 +39,12 @@ const swaggerSpec={
   },
   "servers": [
     {
-      "url": "http://localhost:3000",
-      "description": "Local Docker"
+      "url": "https://api-gateway-cxkr.onrender.com",
+      "description": "Render (mặc định khi mở trên Render)"
     },
     {
-      "url": "https://api-gateway-cxkr.onrender.com",
-      "description": "Render"
+      "url": "http://localhost:3000",
+      "description": "Local Docker (chọn khi chạy docker compose up)"
     }
   ],
   "components": {
