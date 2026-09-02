@@ -40,7 +40,11 @@ const swaggerSpec={
   "servers": [
     {
       "url": "http://localhost:3000",
-      "description": "API Gateway"
+      "description": "Local Docker"
+    },
+    {
+      "url": "https://api-gateway-cxkr.onrender.com",
+      "description": "Render"
     }
   ],
   "components": {
