@@ -1,0 +1,24 @@
+name: keep-render-alive
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"  # moi 10 phut
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping all Render services
+        run: |
+          for url in https://api-gateway-cxkr.onrender.com/health \
+                     https://user-service-xnlb.onrender.com/health \
+                     https://product-service-zfh0.onrender.com/health \
+                     https://order-service-sees.onrender.com/health \
+                     https://payment-soap-gateway.onrender.com/health \
+                     https://payment-service-ud4x.onrender.com/health \
+                     https://notification-service-3917.onrender.com/health; do
+            echo "Ping $url"
+            curl -s -m 15 "$url" | head -c 200
+            echo ""
+          done
