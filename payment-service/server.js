@@ -36,8 +36,12 @@ async function dbUpdatePayment(id, patch){
   return {...data, transactionId:data.transaction_id, orderId:data.order_id};
 }
 // ---------- Circuit Breaker for SOAP Gateway (slide 49) ----------
+// Dual-mode: Docker (http://payment-soap-gateway:3004/wsdl?wsdl) <-> Render (https://xxx.onrender.com/wsdl?wsdl) <-> local (http://localhost:3004/wsdl?wsdl)
+// WSDL file có <soap:address location="http://localhost:3004/wsdl"/> cứng payment-soap-gateway/payment.wsdl:70 nên phải override endpoint bằng WSDL_URL
+function getSoapEndpoint(){ return WSDL_URL.split('?')[0]; }
 const soapProcessBreaker = new CircuitBreaker(async ({orderId,amount,currency,cardNumber,expiryDate,cvv,callbackUrl})=>{
   const client=await soap.createClientAsync(WSDL_URL);
+  client.setEndpoint(getSoapEndpoint());
   const wsSecurity=new soap.WSSecurity('MERCHANT_001','secret_hashed', {hasTimeStamp:false,hasNonce:true});
   client.setSecurity(wsSecurity);
   const [result]=await client.processPaymentAsync({orderId,amount,currency,cardNumber,expiryDate,cvv,callbackUrl:callbackUrl||'https://api.shop.com/payments/callback'});
@@ -49,6 +53,7 @@ soapProcessBreaker.fallback(()=> { throw new Error('Payment gateway circuit brea
 
 const soapRefundBreaker = new CircuitBreaker(async ({transactionId, amount})=>{
   const client=await soap.createClientAsync(WSDL_URL);
+  client.setEndpoint(getSoapEndpoint());
   client.setSecurity(new soap.WSSecurity('MERCHANT_001','secret_hashed',{}));
   const [result]=await client.refundPaymentAsync({transactionId,amount});
   return result;

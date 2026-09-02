@@ -3,13 +3,19 @@ const swaggerUi=require('swagger-ui-express');
 const axios=require('axios');
 const CircuitBreaker=require('opossum');
 let redisClient=null;
-try {
-  const {createClient} = require('redis');
-  const REDIS_URL=process.env.REDIS_URL||'redis://localhost:6379';
-  redisClient=createClient({url:REDIS_URL});
-  redisClient.on('error', e=> console.log('[redis] error',e.message));
-  redisClient.connect().then(()=>console.log('[gateway] Redis connected '+REDIS_URL)).catch(e=>{console.log('[gateway] Redis unavailable, fallback to in-memory',e.message); redisClient=null;});
-} catch(e){ console.log('[gateway] redis module not available, in-memory fallback',e.message); redisClient=null; }
+// Dual-mode: Docker (redis://redis:6379 via docker-compose.yml:82) <-> Render (rediss://...upstash.io:6379) <-> local/no-redis (in-memory)
+// Chỉ kết nối khi REDIS_URL được set explicit, tránh spam [redis] error khi chạy không có Redis
+const REDIS_URL=process.env.REDIS_URL;
+if(!REDIS_URL){
+  console.log('[gateway] Redis disabled (no REDIS_URL), using in-memory rate limit');
+} else {
+  try {
+    const {createClient} = require('redis');
+    redisClient=createClient({url:REDIS_URL});
+    redisClient.on('error', e=> console.log('[redis] error',e.message));
+    redisClient.connect().then(()=>console.log('[gateway] Redis connected '+REDIS_URL)).catch(e=>{console.log('[gateway] Redis unavailable, fallback to in-memory',e.message); try{redisClient.disconnect();}catch(_){} redisClient=null;});
+  } catch(e){ console.log('[gateway] redis module not available, in-memory fallback',e.message); redisClient=null; }
+}
 
 const app=express();
 app.use(cors()); app.use(express.json());
