@@ -2,7 +2,7 @@ name: keep-render-alive
 
 on:
   schedule:
-    - cron: "*/10 * * * *"  # moi 10 phut
+    - cron: "*/10 * * * *"  # moi 10 phut - giữ Render không sleep (sleep sau 15p idle)
   workflow_dispatch:
 
 jobs:
@@ -19,6 +19,24 @@ jobs:
                      https://payment-service-ud4x.onrender.com/health \
                      https://notification-service-3917.onrender.com/health; do
             echo "Ping $url"
-            curl -s -m 15 "$url" | head -c 200
+            curl -s -m 15 "$url" | head -c 300
             echo ""
           done
+
+      # Supabase free tier pause sau 7 ngày không có request.
+      # Health của các service (user/product/order...) đã query Supabase nên ping trên đã gián tiếp giữ Supabase alive.
+      # Thêm ping trực tiếp Supabase REST để đảm bảo ngay cả khi Render health fail vẫn không bị pause.
+      - name: Ping Supabase directly (prevent 7-day pause)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          if [ -z "$SUPABASE_URL" ]; then echo "SUPABASE_URL not set -> skip (đã ping gián tiếp qua /health)"; exit 0; fi
+          KEY="${SUPABASE_ANON_KEY:-$SUPABASE_SERVICE_ROLE_KEY}"
+          if [ -z "$KEY" ]; then echo "Thiếu SUPABASE_ANON_KEY -> skip"; exit 0; fi
+          echo "→ Ping Supabase REST $SUPABASE_URL/rest/v1/users?select=count"
+          curl -s -m 15 "$SUPABASE_URL/rest/v1/users?select=count" \
+            -H "apikey: $KEY" -H "Authorization: Bearer $KEY" | head -c 300
+          echo ""
+          echo "✅ Supabase ping done"

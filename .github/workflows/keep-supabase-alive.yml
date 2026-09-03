@@ -1,0 +1,95 @@
+name: keep-supabase-alive
+
+# Supabase free tier tự pause nếu 7 ngày không có request.
+# Workflow này ping trực tiếp Supabase REST + Postgres để giữ project luôn active.
+# Chạy mỗi 2 ngày lúc 03:00 UTC (đủ dưới ngưỡng 7 ngày, tiết kiệm quota).
+
+on:
+  schedule:
+    - cron: "0 3 */2 * *"  # mỗi 2 ngày, 03:00 UTC
+  workflow_dispatch:
+
+jobs:
+  ping-supabase:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase REST API
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          echo "=== Supabase keep-alive $(date -u) ==="
+
+          # Ưu tiên 1: Ping qua REST API (PostgREST) - đếm users
+          if [ -n "$SUPABASE_URL" ]; then
+            KEY="${SUPABASE_ANON_KEY:-$SUPABASE_SERVICE_ROLE_KEY}"
+            if [ -z "$KEY" ]; then
+              echo "⚠️ SUPABASE_URL có nhưng thiếu SUPABASE_ANON_KEY/SERVICE_ROLE_KEY -> skip REST ping"
+            else
+              echo "→ Ping REST: $SUPABASE_URL/rest/v1/users?select=count"
+              HTTP_CODE=$(curl -s -o /tmp/resp.json -w "%{http_code}" -m 15 \
+                "$SUPABASE_URL/rest/v1/users?select=count" \
+                -H "apikey: $KEY" \
+                -H "Authorization: Bearer $KEY" \
+                -H "Range: 0-0")
+              echo "HTTP $HTTP_CODE"
+              cat /tmp/resp.json | head -c 500; echo ""
+              if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 400 ]; then
+                echo "✅ Supabase REST ping OK"
+              else
+                echo "⚠️ REST ping failed HTTP $HTTP_CODE (có thể bảng chưa tạo hoặc RLS)"
+                # fallback: thử ping products
+                echo "→ Thử fallback /rest/v1/products?select=count"
+                HTTP2=$(curl -s -o /tmp/resp2.json -w "%{http_code}" -m 15 \
+                  "$SUPABASE_URL/rest/v1/products?select=count" \
+                  -H "apikey: $KEY" -H "Authorization: Bearer $KEY")
+                echo "HTTP $HTTP2"; cat /tmp/resp2.json | head -c 500; echo ""
+              fi
+            fi
+          else
+            echo "⚠️ SUPABASE_URL secret chưa set -> skip REST ping"
+          fi
+
+          # Ưu tiên 2: Ping qua Postgres (pooler) nếu có DATABASE_URL - chạy SELECT 1
+          if [ -n "$DATABASE_URL" ]; then
+            echo "→ Ping Postgres via DATABASE_URL"
+            # Dùng node pg để tránh cài psql
+            npm init -y >/dev/null 2>&1
+            npm install pg@8 >/dev/null 2>&1
+            node -e "
+              const {Client}=require('pg');
+              (async()=>{
+                const c=new Client({connectionString:process.env.DATABASE_URL, ssl:{rejectUnauthorized:false}});
+                try{
+                  await c.connect();
+                  const r=await c.query('SELECT 1 as ping, now()');
+                  console.log('✅ Postgres ping OK', r.rows[0]);
+                  await c.end();
+                }catch(e){
+                  console.error('❌ Postgres ping FAIL', e.message);
+                  process.exit(1);
+                }
+              })();
+            "
+          else
+            echo "ℹ️ DATABASE_URL chưa set -> skip Postgres ping (REST đã đủ để giữ alive)"
+          fi
+
+          echo "=== Done ==="
+
+      - name: Also ping Render health (indirect Supabase query)
+        # Health của mỗi service đã query Supabase (users/products/orders...), nên ping này cũng giữ Supabase alive
+        run: |
+          echo "→ Ping Render services (health sẽ query Supabase)"
+          for url in https://api-gateway-cxkr.onrender.com/health \
+                     https://user-service-xnlb.onrender.com/health \
+                     https://product-service-zfh0.onrender.com/health \
+                     https://order-service-sees.onrender.com/health \
+                     https://payment-service-ud4x.onrender.com/health \
+                     https://notification-service-3917.onrender.com/health; do
+            echo -n "Ping $url ... "
+            CODE=$(curl -s -o /tmp/h.json -w "%{http_code}" -m 15 "$url" || echo "000")
+            echo "HTTP $CODE"
+          done
